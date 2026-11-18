@@ -1,12 +1,12 @@
 # Handoff — where the build stands
 
 Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
-`docs/ASSUMPTIONS.md` (every decision so far, #1–42).
+`docs/ASSUMPTIONS.md` (every decision so far, #1–51).
 
 ## Status
 
-- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–4 committed.
-- **Next: Phase 5 — RAG.**
+- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–5 committed.
+- **Next: Phase 6 — LangGraph pipeline + streaming.**
 - Working agreement: finish a phase fully; ruff + mypy + pytest pass; commit per phase on `main`;
   log ambiguities in `docs/ASSUMPTIONS.md`; ask before deploying, paid services or stack changes.
   The user puts API keys in `backend/.env` themselves.
@@ -16,7 +16,7 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
 - Backend commands run from `backend/` as `python -m uv run ...` (`uv` is not on PATH), with
   `UV_PROJECT_ENVIRONMENT=C:/Users/asus/.venvs/invoiceiq` and `PYTHONIOENCODING=utf-8`.
 - Checks: `python -m uv run ruff check .`, `ruff format --check .`, `mypy app scripts tests`,
-  `pytest -q` (416 passing at the end of Phase 4).
+  `pytest -q` (460 passing at the end of Phase 5).
 - Neon DB in `backend/.env` (`DATABASE_URL`); `GOOGLE_API_KEY` and `GROQ_API_KEY` are set.
 - Dev servers may already be running (backend :8000, frontend :3000) — check ports first.
 
@@ -46,12 +46,26 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
   order (all match ground truth); `tests/contract_fixture.py` parses the contract Markdown into
   `ContractTerms` as a stand-in for RAG. Design decisions: ASSUMPTIONS #31–42.
 
-## Phase 5 — RAG
+- **Phase 5:** `app/rag/` — `ingest` (Markdown → 191 citable chunks, content-hash ids),
+  `store` (`PgKnowledgeStore` on Neon via `langchain-postgres` `PGVectorStore`, table
+  `knowledge_chunks`; `MemoryKnowledgeStore` for tests), `retriever` (`HybridRetriever`: dense +
+  OR-ed full-text, RRF, relevance gate, AP glossary), `index` (`reindex`, idempotent),
+  `contract_terms` (`contract_terms_for_invoice` = retrieve vendor clauses → LLM reads
+  `ContractTermsRead` → `ground()` keeps only facts the cited excerpt states → `ContractTerms`).
+  `app.llm.models.structured_model(schema)` is the generic structured-output call. API:
+  `GET /knowledge`, `POST /knowledge/search`, `POST /admin/reindex`. Scripts:
+  `ingest_knowledge`, `eval_rag` (`--pg`, `--answers`, `--write`, `--record-contracts`,
+  `--case <key>`). Neon is indexed. Contract readings recorded in
+  `tests/fixtures/contract_terms/` and replayed by `test_rules_cases.py`.
 
-Ingest `data/knowledge/` into PGVector (heading-aware chunks; metadata `source`, `section`,
-`vendor_id`, `doc_type`, validity), hybrid retrieval (vector + full-text, RRF), and a
-`retrieve_policy` step whose LLM output is `app.rules.models.ContractTerms` (rates with validity
-and citations, `rate_revision_citation`, `no_po_citation`). It should reproduce what
-`tests/contract_fixture.py` gives today, so `test_rules_cases.py` can run on recorded RAG output.
-Deferred contract citations (ASSUMPTIONS #40) come from here. Plus the RAG eval set (hit-rate@5).
-**Done when:** edge case #3 flags the price with a correct contract citation.
+## Phase 6 — LangGraph pipeline + streaming
+
+`StateGraph` with one node per stage (plan §6), Postgres checkpointer on Neon (psycopg URL from
+`DATABASE_URL`, ASSUMPTIONS #2), `interrupt()` for human review and `Command(resume=...)` via
+`POST /runs/{id}/review`, SSE `GET /runs/{id}/events`, background execution, `runs`/`run_steps`
+tables (migration 0002). Nodes call what exists: `extract_invoice` (Phase 3),
+`contract_terms_for_invoice` with `get_knowledge_store()` (Phase 5), `evaluate()` +
+`history_record()` (Phase 4; reference data from the DB instead of the seed JSON). The `explain`
+node can cite the retrieved clauses (`ContractTermsResult.clauses`) and policy chunks.
+**Done when:** a scanned invoice pauses for review, and approving it resumes the graph to
+completion.
