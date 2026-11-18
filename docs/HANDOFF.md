@@ -1,12 +1,13 @@
 # Handoff — where the build stands
 
 Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
-`docs/ASSUMPTIONS.md` (every decision so far, #1–89).
+`docs/ASSUMPTIONS.md` (every decision so far, #1–98).
 
 ## Status
 
-- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–9 committed.
-- **Next: Phase 10 — n8n automations.**
+- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–10 committed (Phase 10's n8n side still needs the user's
+  n8n cloud account — see below).
+- **Next: Phase 11 — Evaluation.**
 - Working agreement: finish a phase fully; ruff + mypy + pytest pass; commit per phase on `main`;
   log ambiguities in `docs/ASSUMPTIONS.md`; ask before deploying, paid services or stack changes.
   The user puts API keys in `backend/.env` themselves.
@@ -16,7 +17,7 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
 - Backend commands run from `backend/` as `python -m uv run ...` (`uv` is not on PATH), with
   `UV_PROJECT_ENVIRONMENT=C:/Users/asus/.venvs/invoiceiq` and `PYTHONIOENCODING=utf-8`.
 - Checks: `python -m uv run ruff check .`, `ruff format --check .`, `mypy app scripts tests`,
-  `pytest -q` (506 passing at the end of Phase 9).
+  `pytest -q` (522 passing at the end of Phase 10).
 - Neon DB in `backend/.env` (`DATABASE_URL`); `GOOGLE_API_KEY` and `GROQ_API_KEY` are set.
 - Dev servers may already be running (backend :8000, frontend :3000) — check ports first.
   The backend must run with `--loop app.loop:selector_loop_factory` on Windows (psycopg).
@@ -101,14 +102,28 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
   `lib/chat.ts`): suggestions, live tool steps, streamed answer, citation chips (case → run page,
   clause → its excerpt), sources list, new chat, restore on reload. ASSUMPTIONS #84–89.
 
-## Phase 10 — n8n automations
+- **Phase 10:** n8n. `app/integrations/` — `signing` (HMAC both ways, `canonical_json`),
+  `notify` (`Notifier`: `review_needed` / `vendor_followup` signed webhooks, retries,
+  `notifications` rows), `followup` (vendor-faq templates). `app/api/intake.py`:
+  `POST /intake/email` (signed, no API key; idempotent by message id + file name) and
+  `GET /integrations`. `RunService(notifier=…)` schedules notices when a run pauses. Tunnel guard
+  middleware in `app/main.py`. Migration 0004 applied on Neon. Workflows in `n8n/workflows/`,
+  setup in `n8n/README.md`. UI: Settings → Integrations. ASSUMPTIONS #90–98 (#97 = Phase 8 bug
+  fixed: older paused cases had no `policy`).
+  **Still open:** the user imports the workflows into n8n cloud, connects Gmail, sets `API_KEY`,
+  `N8N_WEBHOOK_SECRET`, `N8N_BASE_URL` in `backend/.env` (and `API_KEY` for the frontend), runs
+  `cloudflared tunnel --url http://localhost:8000`, fills the Config nodes and activates the
+  workflows. Then check the "done when": email a sample PDF → run + reply; reviewer email with the
+  deep link.
 
-Plan §12: four workflows exported to `n8n/workflows/` — (1) email intake (Gmail/IMAP trigger with a
-PDF → HMAC-signed POST to a new `POST /intake/email` → reply "received, run #…"), (2) review
-notification (FastAPI calls an n8n webhook when a run reaches WAITING_REVIEW → email/Slack with a
-deep link to the run; reminder after 24 h), (3) vendor follow-up on REQUEST_INFO / missing fields
-(template from `vendor-faq.md`), (4) daily AP summary from `GET /stats`. Webhooks both ways are
-**HMAC-SHA256 signed with a timestamp check** (`N8N_WEBHOOK_SECRET`, `N8N_BASE_URL` already in
-`app/config.py`). Runs get `source="EMAIL"`. **Ask the user first** how to run n8n (Docker locally vs
-n8n cloud) and which mail account / Slack to use — that's a stack/service decision.
-**Done when:** emailing a PDF creates a run, and the reviewer gets a notification with a deep link.
+## Phase 11 — Evaluation
+
+Plan §9/§184: `backend/scripts/eval.py` runs all 25 samples through the graph and reports
+field-level extraction accuracy, decision accuracy (vs `ground-truth/*.json` `expected`), average
+latency, LLM calls/tokens per invoice, plus the RAG eval (`scripts/eval_rag.py`: hit-rate@5,
+answer correctness with an LLM judge). Tune prompts/rules where it fails, document every change
+and the results in `docs/EVAL_RESULTS.md`, and show the latest numbers on the dashboard (the
+extraction-accuracy KPI is still missing there). Existing pieces: `scripts/eval_extraction.py`
+(`--record`/`--replay`, `compare()`), `scripts/run_samples_live.py` (timings), `tests/test_rules_cases.py`.
+Reset the demo (or reseed) before a live pass — samples are order-dependent.
+**Done when:** `docs/EVAL_RESULTS.md` shows extraction, decision and RAG metrics.
