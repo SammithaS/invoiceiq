@@ -1,12 +1,12 @@
 # Handoff — where the build stands
 
 Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
-`docs/ASSUMPTIONS.md` (every decision so far, #1–51).
+`docs/ASSUMPTIONS.md` (every decision so far, #1–62).
 
 ## Status
 
-- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–5 committed.
-- **Next: Phase 6 — LangGraph pipeline + streaming.**
+- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–6 committed.
+- **Next: Phase 7 — Live run view, review queue, dashboard.**
 - Working agreement: finish a phase fully; ruff + mypy + pytest pass; commit per phase on `main`;
   log ambiguities in `docs/ASSUMPTIONS.md`; ask before deploying, paid services or stack changes.
   The user puts API keys in `backend/.env` themselves.
@@ -16,9 +16,10 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
 - Backend commands run from `backend/` as `python -m uv run ...` (`uv` is not on PATH), with
   `UV_PROJECT_ENVIRONMENT=C:/Users/asus/.venvs/invoiceiq` and `PYTHONIOENCODING=utf-8`.
 - Checks: `python -m uv run ruff check .`, `ruff format --check .`, `mypy app scripts tests`,
-  `pytest -q` (460 passing at the end of Phase 5).
+  `pytest -q` (475 passing at the end of Phase 6).
 - Neon DB in `backend/.env` (`DATABASE_URL`); `GOOGLE_API_KEY` and `GROQ_API_KEY` are set.
 - Dev servers may already be running (backend :8000, frontend :3000) — check ports first.
+  The backend must run with `--loop app.loop:selector_loop_factory` on Windows (psycopg).
 
 ## What exists
 
@@ -58,14 +59,24 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
   `--case <key>`). Neon is indexed. Contract readings recorded in
   `tests/fixtures/contract_terms/` and replayed by `test_rules_cases.py`.
 
-## Phase 6 — LangGraph pipeline + streaming
+- **Phase 6:** `app/graph/` — `state` (JSON-only `CaseState`), `nodes` (one per stage, `step()`
+  wrapper: events, timings, error capture; `human_review` = `interrupt()`), `builder`
+  (`build_graph(deps, checkpointer)`), `deps` (`GraphDeps`: extract / contract terms / explain /
+  policy / today — tests pass replay versions), `explain` (LLM summary + template fallback),
+  `repo` (reference data from the DB, invoice-history upserts), `runner` (`RunService`: background
+  tasks, `run_steps`, SSE broker, `review()`, `recover()`; `open_checkpointer`). API in
+  `app/api/runs.py`. Migration 0002 applied on Neon. Live-checked on Neon, including a restart
+  while paused (ASSUMPTIONS #62). Launch config `backend-live` runs on :8010.
 
-`StateGraph` with one node per stage (plan §6), Postgres checkpointer on Neon (psycopg URL from
-`DATABASE_URL`, ASSUMPTIONS #2), `interrupt()` for human review and `Command(resume=...)` via
-`POST /runs/{id}/review`, SSE `GET /runs/{id}/events`, background execution, `runs`/`run_steps`
-tables (migration 0002). Nodes call what exists: `extract_invoice` (Phase 3),
-`contract_terms_for_invoice` with `get_knowledge_store()` (Phase 5), `evaluate()` +
-`history_record()` (Phase 4; reference data from the DB instead of the seed JSON). The `explain`
-node can cite the retrieved clauses (`ContractTermsResult.clauses`) and policy chunks.
-**Done when:** a scanned invoice pauses for review, and approving it resumes the graph to
-completion.
+## Phase 7 — Live run view, review queue, dashboard
+
+UI pages from plan §13 on the Phase 6 API: `/` upload + "Try a sample" (`GET /samples`,
+`POST /samples/{key}/run`), `/runs/[id]` live view (`GET /runs/{id}` for the snapshot, then
+`EventSource` on `/api/backend/runs/{id}/events?after=<last seq>`; events: `step_started`,
+`step_finished`, `rule`, `paused`, `status`, `ping`), PDF preview from `GET /runs/{id}/file` with
+evidence boxes from `state.extraction.evidence`, decision card from `state.assessment` +
+`explanation`, inline Approve/Reject (`POST /runs/{id}/review`), `/review` queue
+(`GET /runs?status=WAITING_REVIEW`), `/dashboard`. Regenerate the typed client
+(`scripts/export_openapi.py` → `frontend/lib/api/schema.d.ts`). Check the Next.js proxy route
+streams SSE unbuffered. Speed up `retrieve_policy` (#62) so samples finish < 30 s.
+**Done when:** every sample runs live in the UI under ~30 seconds, and review works end-to-end.
