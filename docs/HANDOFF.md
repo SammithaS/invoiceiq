@@ -1,12 +1,12 @@
 # Handoff — where the build stands
 
 Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
-`docs/ASSUMPTIONS.md` (every decision so far, #1–62).
+`docs/ASSUMPTIONS.md` (every decision so far, #1–73).
 
 ## Status
 
-- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–6 committed.
-- **Next: Phase 7 — Live run view, review queue, dashboard.**
+- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–7 committed.
+- **Next: Phase 8 — Procedure, approvals, mock ERP & case closure.**
 - Working agreement: finish a phase fully; ruff + mypy + pytest pass; commit per phase on `main`;
   log ambiguities in `docs/ASSUMPTIONS.md`; ask before deploying, paid services or stack changes.
   The user puts API keys in `backend/.env` themselves.
@@ -16,10 +16,14 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
 - Backend commands run from `backend/` as `python -m uv run ...` (`uv` is not on PATH), with
   `UV_PROJECT_ENVIRONMENT=C:/Users/asus/.venvs/invoiceiq` and `PYTHONIOENCODING=utf-8`.
 - Checks: `python -m uv run ruff check .`, `ruff format --check .`, `mypy app scripts tests`,
-  `pytest -q` (475 passing at the end of Phase 6).
+  `pytest -q` (476 passing at the end of Phase 6–7).
 - Neon DB in `backend/.env` (`DATABASE_URL`); `GOOGLE_API_KEY` and `GROQ_API_KEY` are set.
 - Dev servers may already be running (backend :8000, frontend :3000) — check ports first.
   The backend must run with `--loop app.loop:selector_loop_factory` on Windows (psycopg).
+  Frontend checks: `pnpm typecheck`, `pnpm lint` and `pnpm build` (the build catches
+  cacheComponents/Suspense errors that dev doesn't). `.claude/launch.json` has
+  `backend-live` (:8010) and `frontend-live` (`next start` on :3010, API_URL → :8010) so live
+  checks never touch the user's own :8000/:3000 servers.
 
 ## What exists
 
@@ -68,15 +72,29 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
   `app/api/runs.py`. Migration 0002 applied on Neon. Live-checked on Neon, including a restart
   while paused (ASSUMPTIONS #62). Launch config `backend-live` runs on :8010.
 
-## Phase 7 — Live run view, review queue, dashboard
+- **Phase 7:** UI on the runs API. `/` upload + 25 sample cards; `/runs/[id]` live view
+  (`lib/use-run.ts`: EventSource + snapshot refetch; `app/runs/[id]/`: timeline, PDF page images
+  with evidence boxes from `GET /runs/{id}/pages/{n}`, decision card with inline review, touchless
+  checklist, cited sources, extracted fields, rule checks); `/review` queue
+  (`components/review-form.tsx` shared); `/dashboard` on `GET /stats`; sidebar review count.
+  Backend speed work (#63, #64, #71, #72) and `scripts/run_samples_live.py` (timing pass; reseed
+  first). Results: ASSUMPTIONS #73.
 
-UI pages from plan §13 on the Phase 6 API: `/` upload + "Try a sample" (`GET /samples`,
-`POST /samples/{key}/run`), `/runs/[id]` live view (`GET /runs/{id}` for the snapshot, then
-`EventSource` on `/api/backend/runs/{id}/events?after=<last seq>`; events: `step_started`,
-`step_finished`, `rule`, `paused`, `status`, `ping`), PDF preview from `GET /runs/{id}/file` with
-evidence boxes from `state.extraction.evidence`, decision card from `state.assessment` +
-`explanation`, inline Approve/Reject (`POST /runs/{id}/review`), `/review` queue
-(`GET /runs?status=WAITING_REVIEW`), `/dashboard`. Regenerate the typed client
-(`scripts/export_openapi.py` → `frontend/lib/api/schema.d.ts`). Check the Next.js proxy route
-streams SSE unbuffered. Speed up `retrieve_policy` (#62) so samples finish < 30 s.
-**Done when:** every sample runs live in the UI under ~30 seconds, and review works end-to-end.
+## Phase 8 — Procedure, approvals, mock ERP & case closure
+
+Versioned Operating Procedure (`procedures` table, `/procedure` editor) loaded into
+`app.rules.policy.Policy` at the start of each case (`GraphDeps.policy` is the hook; record
+`procedure_version` — already on `runs`). New graph nodes after `rules`: `route_exception`
+(recovery attempts + owner + question; the rules already produce owner/question per exception),
+`approval_routing` (approval matrix → zero/one/two approver interrupts; four-eyes for overrides
+and bank changes; today the single `human_review` pause stands in for these), `post_erp`
+(mock ERP behind an `ErpProvider`, idempotency key = run id; honour `erp_fault` for
+`malabar-erp-mismatch` in demo mode → `ERP_MISMATCH`), `verify_post` (read-back), plus the
+non-PO coding approval. Tables: procedures, exceptions, approvals, erp_documents, erp_postings,
+corrections; corrections feed extraction hints (`app.llm.prompts.hints_block`). UI: `/procedure`,
+`/approvals`, `/erp`, `/cases/[id]/evidence`; timeline gains the new nodes; touchless checklist's
+ERP item becomes real; dashboard gate metrics (posting, corrections, human minutes).
+A demo reset (`POST /admin/reset-demo`: reseed history) would help — samples are
+order-dependent and duplicates of earlier runs reject.
+**Done when:** changing the price tolerance in `/procedure` changes the next case's decision; an
+approved invoice is posted and verified in `/erp`; the closed case shows its full audit trail.
