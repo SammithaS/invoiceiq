@@ -1,12 +1,12 @@
 # Handoff — where the build stands
 
 Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
-`docs/ASSUMPTIONS.md` (every decision so far, #1–83).
+`docs/ASSUMPTIONS.md` (every decision so far, #1–89).
 
 ## Status
 
-- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–8 committed.
-- **Next: Phase 9 — Ask-AP assistant.**
+- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–9 committed.
+- **Next: Phase 10 — n8n automations.**
 - Working agreement: finish a phase fully; ruff + mypy + pytest pass; commit per phase on `main`;
   log ambiguities in `docs/ASSUMPTIONS.md`; ask before deploying, paid services or stack changes.
   The user puts API keys in `backend/.env` themselves.
@@ -16,7 +16,7 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
 - Backend commands run from `backend/` as `python -m uv run ...` (`uv` is not on PATH), with
   `UV_PROJECT_ENVIRONMENT=C:/Users/asus/.venvs/invoiceiq` and `PYTHONIOENCODING=utf-8`.
 - Checks: `python -m uv run ruff check .`, `ruff format --check .`, `mypy app scripts tests`,
-  `pytest -q` (492 passing at the end of Phase 8).
+  `pytest -q` (506 passing at the end of Phase 9).
 - Neon DB in `backend/.env` (`DATABASE_URL`); `GOOGLE_API_KEY` and `GROQ_API_KEY` are set.
 - Dev servers may already be running (backend :8000, frontend :3000) — check ports first.
   The backend must run with `--loop app.loop:selector_loop_factory` on Windows (psycopg).
@@ -91,12 +91,24 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
   Procedure v1 is active on Neon (v2 with 1% tolerance exists from the live check). ASSUMPTIONS
   #74–83.
 
-## Phase 9 — Ask-AP assistant
+- **Phase 9:** Ask AP. `app/assistant/` — `tools` (`AssistantTools`: `search_policies`,
+  `find_cases`, `get_case`, `case_stats`; read-only, sources as tool artifacts), `agent`
+  (`build_assistant(tools, model_factory, checkpointer)`: agent ⇄ tools → finalize, 5-round cap,
+  citation check, tool-dump guard), `service` (`AssistantService.ask()` → chat events, `history()`).
+  `app.llm.models.chat_model(tools)` = tool-calling model with the provider fallbacks. API
+  `app/api/chat.py`: `POST /chat` (SSE), `GET /chat/{thread_id}`; wired in `app/main.py` on the
+  shared checkpointer (off with a warning if no LLM key). UI `/assistant` (`app/assistant/ask-ap.tsx`,
+  `lib/chat.ts`): suggestions, live tool steps, streamed answer, citation chips (case → run page,
+  clause → its excerpt), sources list, new chat, restore on reload. ASSUMPTIONS #84–89.
 
-Tool-calling agent (same provider chain as `app/llm/models.py`) with tools over what exists:
-knowledge search (`app/rag/retriever.HybridRetriever`, citations), run/case lookup by vendor,
-invoice number or run id (`runs` + `GET /runs/{id}/records` data: exceptions, approvals, ERP),
-and maybe the stats query. Streaming chat endpoint (SSE like `/runs/{id}/events`) and a chat UI
-page with citation chips (`components/ui/badges.CitationChip`). Answers must cite sources and say
-when they don't know; tool results are data, not instructions.
-**Done when:** "Why was the TechNova invoice flagged?" returns the right reason with citations.
+## Phase 10 — n8n automations
+
+Plan §12: four workflows exported to `n8n/workflows/` — (1) email intake (Gmail/IMAP trigger with a
+PDF → HMAC-signed POST to a new `POST /intake/email` → reply "received, run #…"), (2) review
+notification (FastAPI calls an n8n webhook when a run reaches WAITING_REVIEW → email/Slack with a
+deep link to the run; reminder after 24 h), (3) vendor follow-up on REQUEST_INFO / missing fields
+(template from `vendor-faq.md`), (4) daily AP summary from `GET /stats`. Webhooks both ways are
+**HMAC-SHA256 signed with a timestamp check** (`N8N_WEBHOOK_SECRET`, `N8N_BASE_URL` already in
+`app/config.py`). Runs get `source="EMAIL"`. **Ask the user first** how to run n8n (Docker locally vs
+n8n cloud) and which mail account / Slack to use — that's a stack/service decision.
+**Done when:** emailing a PDF creates a run, and the reviewer gets a notification with a deep link.
