@@ -1,12 +1,12 @@
 # Handoff — where the build stands
 
 Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
-`docs/ASSUMPTIONS.md` (every decision so far, #1–73).
+`docs/ASSUMPTIONS.md` (every decision so far, #1–83).
 
 ## Status
 
-- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–7 committed.
-- **Next: Phase 8 — Procedure, approvals, mock ERP & case closure.**
+- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–8 committed.
+- **Next: Phase 9 — Ask-AP assistant.**
 - Working agreement: finish a phase fully; ruff + mypy + pytest pass; commit per phase on `main`;
   log ambiguities in `docs/ASSUMPTIONS.md`; ask before deploying, paid services or stack changes.
   The user puts API keys in `backend/.env` themselves.
@@ -16,7 +16,7 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
 - Backend commands run from `backend/` as `python -m uv run ...` (`uv` is not on PATH), with
   `UV_PROJECT_ENVIRONMENT=C:/Users/asus/.venvs/invoiceiq` and `PYTHONIOENCODING=utf-8`.
 - Checks: `python -m uv run ruff check .`, `ruff format --check .`, `mypy app scripts tests`,
-  `pytest -q` (476 passing at the end of Phase 6–7).
+  `pytest -q` (492 passing at the end of Phase 8).
 - Neon DB in `backend/.env` (`DATABASE_URL`); `GOOGLE_API_KEY` and `GROQ_API_KEY` are set.
 - Dev servers may already be running (backend :8000, frontend :3000) — check ports first.
   The backend must run with `--loop app.loop:selector_loop_factory` on Windows (psycopg).
@@ -80,21 +80,23 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
   Backend speed work (#63, #64, #71, #72) and `scripts/run_samples_live.py` (timing pass; reseed
   first). Results: ASSUMPTIONS #73.
 
-## Phase 8 — Procedure, approvals, mock ERP & case closure
+- **Phase 8:** versioned procedure (`app/procedure.py`, `app/api/procedures.py`, `/procedure`);
+  graph nodes `route_exception`, `approval_routing` (one interrupt per approver, four-eyes by
+  name), `post_erp`, `verify_post` (`app/erp.py`: `ErpProvider`, `MockErp`, `compare`);
+  `app/graph/case_repo.py` (exceptions, approvals, postings, correction hints);
+  `app/evidence.py` (JSON + PDF bundle); `app/api/case.py` (records, approvals inbox/decide,
+  corrections, evidence, ERP ledger/correct, `POST /admin/reset-demo`). Migration 0003 applied on
+  Neon. UI: `/approvals`, `/erp`, `/cases/[id]/evidence`, `/settings` (reset demo), run page
+  exception/approval/ERP cards and field corrections, dashboard ERP/owner/correction cards.
+  Procedure v1 is active on Neon (v2 with 1% tolerance exists from the live check). ASSUMPTIONS
+  #74–83.
 
-Versioned Operating Procedure (`procedures` table, `/procedure` editor) loaded into
-`app.rules.policy.Policy` at the start of each case (`GraphDeps.policy` is the hook; record
-`procedure_version` — already on `runs`). New graph nodes after `rules`: `route_exception`
-(recovery attempts + owner + question; the rules already produce owner/question per exception),
-`approval_routing` (approval matrix → zero/one/two approver interrupts; four-eyes for overrides
-and bank changes; today the single `human_review` pause stands in for these), `post_erp`
-(mock ERP behind an `ErpProvider`, idempotency key = run id; honour `erp_fault` for
-`malabar-erp-mismatch` in demo mode → `ERP_MISMATCH`), `verify_post` (read-back), plus the
-non-PO coding approval. Tables: procedures, exceptions, approvals, erp_documents, erp_postings,
-corrections; corrections feed extraction hints (`app.llm.prompts.hints_block`). UI: `/procedure`,
-`/approvals`, `/erp`, `/cases/[id]/evidence`; timeline gains the new nodes; touchless checklist's
-ERP item becomes real; dashboard gate metrics (posting, corrections, human minutes).
-A demo reset (`POST /admin/reset-demo`: reseed history) would help — samples are
-order-dependent and duplicates of earlier runs reject.
-**Done when:** changing the price tolerance in `/procedure` changes the next case's decision; an
-approved invoice is posted and verified in `/erp`; the closed case shows its full audit trail.
+## Phase 9 — Ask-AP assistant
+
+Tool-calling agent (same provider chain as `app/llm/models.py`) with tools over what exists:
+knowledge search (`app/rag/retriever.HybridRetriever`, citations), run/case lookup by vendor,
+invoice number or run id (`runs` + `GET /runs/{id}/records` data: exceptions, approvals, ERP),
+and maybe the stats query. Streaming chat endpoint (SSE like `/runs/{id}/events`) and a chat UI
+page with citation chips (`components/ui/badges.CitationChip`). Answers must cite sources and say
+when they don't know; tool results are data, not instructions.
+**Done when:** "Why was the TechNova invoice flagged?" returns the right reason with citations.
