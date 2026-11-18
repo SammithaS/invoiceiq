@@ -174,3 +174,11 @@ Ambiguities in the build plan and how they were resolved. Newest phase last.
 | 111 | Hermetic tests | `backend/.env` now holds real n8n settings (Phase 10), which leaked into three tests that assumed none. An autouse fixture blanks `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET` and `APP_URL` for every test (environment beats `.env`); tests that need them set them. | Found by the full test run. |
 | 112 | README | Rewritten: problem, what it does, architecture (Mermaid), the invoice graph and the Ask AP graph (Mermaid), why each tool, edge cases, evaluation summary, setup, checks, scripts, layout, deploy, what's next. | Plan Phase 12. |
 
+## Deploy preparation
+
+| # | Topic | Decision | Why |
+|---|---|---|---|
+| 113 | LLM retries | `app/llm/retry.retry_transient`: extraction and contract reading retry errors that look transient (503, 429, UNAVAILABLE, RESOURCE_EXHAUSTED, overloaded, rate limit) after 8 s and 30 s (`LLM_RETRY_DELAYS`), on top of the SDK's own retries and the provider fallback chain. Other errors, and a quota still exhausted after the last attempt, fail the case as before. The explanation already falls back to a template; Ask AP reports an error message. | Phase 11 live eval: 9/25 cases needed manual reruns. |
+| 114 | Password gate | No user accounts yet, so a public link would let anyone approve cases or reset the demo. `SITE_PASSWORD` (server-side, optional; empty = off) puts one shared password in front of every page and the backend proxy: `frontend/proxy.ts` (Next 16's renamed middleware) checks an HttpOnly cookie holding SHA-256("invoiceiq-gate:" + password), `/login` + `POST /api/login` set it for 30 days (Secure on https), wrong passwords are slowed down, pages redirect to `/login?next=…`, API calls get 401. Checked with a production build: redirect, 401, wrong / right password, forged cookie. | Going live before real auth. |
+| 115 | GitHub | The repo `SammithaS/invoiceiq` is public (user's choice). Before pushing, tracked files and the unpushed history were scanned for every secret value in `backend/.env` / `frontend/.env.local` and for key-like patterns: none. | Public repo. |
+
