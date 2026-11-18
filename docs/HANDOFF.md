@@ -1,12 +1,13 @@
 # Handoff — where the build stands
 
 Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
-`docs/ASSUMPTIONS.md` (every decision so far, #1–99).
+`docs/ASSUMPTIONS.md` (every decision so far, #1–112).
 
 ## Status
 
-- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–10 committed.
-- **Next: Phase 11 — Evaluation.**
+- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. All 12 phases committed.
+- **Next: deploy, once the user approves** (`deploy/DEPLOY.md`; nothing has been built
+  or deployed). Open item: automatic retries for transient LLM errors (README "What's next").
 - Working agreement: finish a phase fully; ruff + mypy + pytest pass; commit per phase on `main`;
   log ambiguities in `docs/ASSUMPTIONS.md`; ask before deploying, paid services or stack changes.
   The user puts API keys in `backend/.env` themselves.
@@ -16,7 +17,7 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
 - Backend commands run from `backend/` as `python -m uv run ...` (`uv` is not on PATH), with
   `UV_PROJECT_ENVIRONMENT=C:/Users/asus/.venvs/invoiceiq` and `PYTHONIOENCODING=utf-8`.
 - Checks: `python -m uv run ruff check .`, `ruff format --check .`, `mypy app scripts tests`,
-  `pytest -q` (522 passing at the end of Phase 10).
+  `pytest -q` (523 passing at the end of Phase 12); `pnpm e2e` (12 Playwright tests).
 - Neon DB in `backend/.env` (`DATABASE_URL`); `GOOGLE_API_KEY` and `GROQ_API_KEY` are set.
 - Dev servers may already be running (backend :8000, frontend :3000) — check ports first.
   The backend must run with `--loop app.loop:selector_loop_factory` on Windows (psycopg).
@@ -113,14 +114,23 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
   :8000; email → case → reviewer email verified (#99). `scripts/n8n_prefill.py <tunnel URL>`
   regenerates `n8n/local/` (git-ignored) after a tunnel restart or an account switch.
 
-## Phase 11 — Evaluation
+- **Phase 11:** `scripts/eval.py` (isolated stack: fresh SQLite + seed, in-memory checkpointer
+  and index, fixed date; `--live` real LLMs with usage counting and provider-error reruns; `--rag`;
+  `--write` → `docs/EVAL_RESULTS.md` + `data/eval/latest.json`). `GET /eval/latest` and the
+  dashboard's Evaluation card. Tuning: contract-topic citations on non-price checks
+  (`app/rag/clauses.py`, `decide._cite_contract_topics`) and vendor-first retrieval
+  (`HybridRetriever.search`). ASSUMPTIONS #100–106.
 
-Plan §9/§184: `backend/scripts/eval.py` runs all 25 samples through the graph and reports
-field-level extraction accuracy, decision accuracy (vs `ground-truth/*.json` `expected`), average
-latency, LLM calls/tokens per invoice, plus the RAG eval (`scripts/eval_rag.py`: hit-rate@5,
-answer correctness with an LLM judge). Tune prompts/rules where it fails, document every change
-and the results in `docs/EVAL_RESULTS.md`, and show the latest numbers on the dashboard (the
-extraction-accuracy KPI is still missing there). Existing pieces: `scripts/eval_extraction.py`
-(`--record`/`--replay`, `compare()`), `scripts/run_samples_live.py` (timings), `tests/test_rules_cases.py`.
-Reset the demo (or reseed) before a live pass — samples are order-dependent.
-**Done when:** `docs/EVAL_RESULTS.md` shows extraction, decision and RAG metrics.
+- **Phase 12:** phone-layout fixes (base `grid-cols-[minmax(0,1fr)]`), `app/error.tsx`,
+  `app/not-found.tsx`, `/knowledge` page; Playwright (`frontend/e2e/`, `playwright.config.ts`,
+  Edge channel, throwaway backend `scripts/e2e_server.py`); README rewrite with Mermaid diagrams;
+  deploy kit (`backend/Dockerfile`, `.dockerignore`, `deploy/`: compose, Caddyfile, env examples,
+  DEPLOY.md). Tests made hermetic against the real n8n settings in `.env`. ASSUMPTIONS #107–112.
+
+## Next
+
+- **Deploy** (ask first): follow `deploy/DEPLOY.md`. Docker wasn't available on the dev machine,
+  so the first `docker compose up --build` on the VM is also the first build of the images.
+- **Retries for transient LLM errors:** the live eval needed case reruns after Gemini 503/429;
+  retrying inside the extract / contract / explain calls (back-off) would stop cases ending FAILED.
+- n8n cloud trial ends ~2026-12-02: switch account (n8n/README.md) or self-host on the VM.
