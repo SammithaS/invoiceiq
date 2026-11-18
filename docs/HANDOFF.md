@@ -1,12 +1,11 @@
 # Handoff — where the build stands
 
 Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
-`docs/ASSUMPTIONS.md` (every decision so far, #1–98).
+`docs/ASSUMPTIONS.md` (every decision so far, #1–99).
 
 ## Status
 
-- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–10 committed (Phase 10's n8n side still needs the user's
-  n8n cloud account — see below).
+- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–10 committed.
 - **Next: Phase 11 — Evaluation.**
 - Working agreement: finish a phase fully; ruff + mypy + pytest pass; commit per phase on `main`;
   log ambiguities in `docs/ASSUMPTIONS.md`; ask before deploying, paid services or stack changes.
@@ -110,11 +109,9 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
   middleware in `app/main.py`. Migration 0004 applied on Neon. Workflows in `n8n/workflows/`,
   setup in `n8n/README.md`. UI: Settings → Integrations. ASSUMPTIONS #90–98 (#97 = Phase 8 bug
   fixed: older paused cases had no `policy`).
-  **Still open:** the user imports the workflows into n8n cloud, connects Gmail, sets `API_KEY`,
-  `N8N_WEBHOOK_SECRET`, `N8N_BASE_URL` in `backend/.env` (and `API_KEY` for the frontend), runs
-  `cloudflared tunnel --url http://localhost:8000`, fills the Config nodes and activates the
-  workflows. Then check the "done when": email a sample PDF → run + reply; reviewer email with the
-  deep link.
+  **Live:** connected to n8n cloud (trial, ends ~2026-12-02) via a Cloudflare quick tunnel to
+  :8000; email → case → reviewer email verified (#99). `scripts/n8n_prefill.py <tunnel URL>`
+  regenerates `n8n/local/` (git-ignored) after a tunnel restart or an account switch.
 
 ## Phase 11 — Evaluation
 
