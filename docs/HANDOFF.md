@@ -1,12 +1,12 @@
 # Handoff — where the build stands
 
 Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
-`docs/ASSUMPTIONS.md` (every decision so far, #1–30).
+`docs/ASSUMPTIONS.md` (every decision so far, #1–42).
 
 ## Status
 
-- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–3 committed (Phase 3 = `b1f5b76`).
-- **Next: Phase 4 — Rules engine.**
+- Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. Phases 1–4 committed.
+- **Next: Phase 5 — RAG.**
 - Working agreement: finish a phase fully; ruff + mypy + pytest pass; commit per phase on `main`;
   log ambiguities in `docs/ASSUMPTIONS.md`; ask before deploying, paid services or stack changes.
   The user puts API keys in `backend/.env` themselves.
@@ -16,7 +16,7 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
 - Backend commands run from `backend/` as `python -m uv run ...` (`uv` is not on PATH), with
   `UV_PROJECT_ENVIRONMENT=C:/Users/asus/.venvs/invoiceiq` and `PYTHONIOENCODING=utf-8`.
 - Checks: `python -m uv run ruff check .`, `ruff format --check .`, `mypy app scripts tests`,
-  `pytest -q` (287 passing at the end of Phase 3).
+  `pytest -q` (416 passing at the end of Phase 4).
 - Neon DB in `backend/.env` (`DATABASE_URL`); `GOOGLE_API_KEY` and `GROQ_API_KEY` are set.
 - Dev servers may already be running (backend :8000, frontend :3000) — check ports first.
 
@@ -38,25 +38,20 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
   Gemini flash-lite fallback; primary was overloaded). Fixtures in
   `backend/tests/fixtures/extraction/`; `scripts/eval_extraction.py` (`--record` / `--replay`)
   provides `compare()` and `replay_factory(key)`.
+- **Phase 4:** `app/rules/` — `evaluate(extraction, ref, ctx, policy) -> Assessment` (decision,
+  PASS/WARN/FAIL/SKIP rule results with citations, exceptions with owner + specific question,
+  approvals, matched PO/GRN, proposed coding, touchless checklist) and `history_record()` to
+  register a case for later ones. `Policy` holds the #17 numbers; `load_seed_reference()` builds
+  `ReferenceData` from the seed JSON. `tests/test_rules_cases.py` runs all 25 cases in manifest
+  order (all match ground truth); `tests/contract_fixture.py` parses the contract Markdown into
+  `ContractTerms` as a stand-in for RAG. Design decisions: ASSUMPTIONS #31–42.
 
-## Phase 4 — rules engine
+## Phase 5 — RAG
 
-Pure Python in `backend/app/rules/` (math, gst, vendor/PO matching, tolerance, duplicates, decide),
-full unit tests, no LLM. Rule results are PASS/WARN/FAIL with policy citations.
-**Done when:** each of the 25 test invoices yields its expected decision and exception categories,
-using extracted data from the recorded fixtures plus seed data and earlier cases per
-`depends_on` / manifest order.
-
-Policy numbers (`ap-policy.md`; ASSUMPTIONS #14, #15, #17, #18):
-- Price tolerance 2% per line and ₹5,000 per invoice; a cited contract rate beats the PO rate.
-- Quantity tolerance 0 vs GRN; freight ≤ ₹1,000; rounding ₹1.
-- Duplicates: 30-day window; also compare service periods (CloudNest bills monthly).
-- Approval matrix: ≤ ₹5 L none; ≤ ₹25 L Finance Manager; above, + CFO. Non-PO: Department Head
-  (+ Finance Manager above ₹1 L). Bank change: AP Manager + Finance Controller.
-- Precedence: critical FAIL → `REJECTED` (blocked vendor, exact duplicate, math off > ₹1,
-  quotation/credit note); missing dependency → `ON_HOLD` (no GRN, bank change, unknown vendor);
-  any WARN, key confidence < 0.8, or an approval gate → `NEEDS_REVIEW`; else `APPROVED`.
-- `expected.decision` is the decision before any human acts.
-- Contract-rate checks (TechNova ₹1,100 vs ₹1,250) need RAG (Phase 5): take contract terms as an
-  input and use a fixture until the retriever exists.
-- `malabar-erp-mismatch` passes all rules; its ERP fault is injected in Phase 8.
+Ingest `data/knowledge/` into PGVector (heading-aware chunks; metadata `source`, `section`,
+`vendor_id`, `doc_type`, validity), hybrid retrieval (vector + full-text, RRF), and a
+`retrieve_policy` step whose LLM output is `app.rules.models.ContractTerms` (rates with validity
+and citations, `rate_revision_citation`, `no_po_citation`). It should reproduce what
+`tests/contract_fixture.py` gives today, so `test_rules_cases.py` can run on recorded RAG output.
+Deferred contract citations (ASSUMPTIONS #40) come from here. Plus the RAG eval set (hit-rate@5).
+**Done when:** edge case #3 flags the price with a correct contract citation.
