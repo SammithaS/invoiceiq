@@ -6,8 +6,11 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
 ## Status
 
 - Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. All 12 phases committed.
-- **Next: deploy, once the user approves** (`deploy/DEPLOY.md`; nothing has been built
-  or deployed). Open item: automatic retries for transient LLM errors (README "What's next").
+- **Live since 2026-11-19:** https://invoiceiq-tau.vercel.app (Vercel Hobby, functions in bom1, password
+  gate on) → API https://api.137-23-38-197.sslip.io and n8n https://n8n.137-23-38-197.sslip.io on an Oracle
+  Always Free VM (Mumbai, Oracle Linux 9 arm64, 1 OCPU / 6 GB, user `opc`, SSH key `~/.ssh/invoiceiq_oracle`,
+  repo in `~/invoiceiq`, settings in `~/invoiceiq/deploy/{.env,api.env}`), database Neon (shared with dev).
+  Update the server: `ssh … 'cd invoiceiq && git pull && cd deploy && docker compose up -d --build'`.
 - Working agreement: finish a phase fully; ruff + mypy + pytest pass; commit per phase on `main`;
   log ambiguities in `docs/ASSUMPTIONS.md`; ask before deploying, paid services or stack changes.
   The user puts API keys in `backend/.env` themselves.
