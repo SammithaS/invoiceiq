@@ -1,12 +1,12 @@
 # Handoff — where the build stands
 
 Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
-`docs/ASSUMPTIONS.md` (every decision so far, #1–124).
+`docs/ASSUMPTIONS.md` (every decision so far, #1–125).
 
 ## Status
 
 - Repo `C:\Users\asus\Desktop\invoiceiq`, branch `main`. All 12 phases committed.
-- **Live since 2026-11-19:** https://invoiceiq-tau.vercel.app (Vercel Hobby, functions in bom1, password
+- **Live since 2026-11-19:** https://sinoprex-invoice.vercel.app (old address invoiceiq-tau.vercel.app still works; GitHub repo SammithaS/sinoprex-invoice; Vercel Hobby, functions in bom1, password
   gate on) → API https://api.137-23-38-197.sslip.io and n8n https://n8n.137-23-38-197.sslip.io on an Oracle
   Always Free VM (Mumbai, Oracle Linux 9 arm64, 1 OCPU / 6 GB, user `opc`, SSH key `~/.ssh/invoiceiq_oracle`,
   repo in `~/invoiceiq`, settings in `~/invoiceiq/deploy/{.env,api.env}`), database Neon (shared with dev).
