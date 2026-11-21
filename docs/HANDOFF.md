@@ -1,7 +1,7 @@
 # Handoff — where the build stands
 
 Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
-`docs/ASSUMPTIONS.md` (every decision so far, #1–112).
+`docs/ASSUMPTIONS.md` (every decision so far, #1–124).
 
 ## Status
 
@@ -129,6 +129,14 @@ Read this first in a new session, then `docs/BUILD_PLAN.md` (the full plan) and
   Edge channel, throwaway backend `scripts/e2e_server.py`); README rewrite with Mermaid diagrams;
   deploy kit (`backend/Dockerfile`, `.dockerignore`, `deploy/`: compose, Caddyfile, env examples,
   DEPLOY.md). Tests made hermetic against the real n8n settings in `.env`. ASSUMPTIONS #107–112.
+
+- **Phase 13, Apps platform** (replaces n8n as the default automation): `backend/app/apps/`
+  (`manifest.py` typed inputs/connections/events/timers, `secrets.py` Fernet SecretBox + scrub,
+  `platform.py` lifecycle, event dispatch, scheduler, run log, audit, n8n env migration,
+  `connections.py` Gmail/Slack/n8n types, `mail.py` Gmail IMAP/SMTP, `builtin/` six apps),
+  `app/api/apps.py`, migration `0005_apps`, `RunService.on_event` → `AppPlatform.emit`.
+  UI: `/apps`, `/apps/[id]`, `/apps/connections`. Needs `SECRETS_KEY` in the server env.
+  Tests `tests/test_apps.py`; e2e "apps" test. ASSUMPTIONS #119–124.
 
 ## Next
 
